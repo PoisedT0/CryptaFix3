@@ -213,10 +213,10 @@ export type RateLimiterStatus = {
 
 // Singleton instances for different API types
 export const etherscanLimiter = new ApiRateLimiter({
-  maxRequestsPerSecond: 3,
-  delayMs: 600,
-  maxRetries: 3,
-  baseRetryDelayMs: 1000,
+  maxRequestsPerSecond: 2, // Lowered to be safer with free tier
+  delayMs: 800,           // Increased delay between calls
+  maxRetries: 5,           // More retries for stability
+  baseRetryDelayMs: 1500,
 });
 
 export const coingeckoLimiter = new ApiRateLimiter({
