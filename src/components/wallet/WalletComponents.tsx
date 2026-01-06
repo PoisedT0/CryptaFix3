@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef } from "react";
+import React, { useState, useEffect, forwardRef } from "react";
 import { motion } from "framer-motion";
 import { Plus, Wallet, X, Check, Loader2, RefreshCw, AlertCircle, Info, WifiOff, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -465,7 +465,7 @@ export const WalletCard = forwardRef<HTMLDivElement, WalletCardProps>(({ wallet,
           }
         }
 
-                // Fallback to Etherscan direct API
+        // Fallback to Etherscan direct API
         if (!walletData) {
           try {
             const etherscanData = await fetchEtherscan(wallet.address, network);
@@ -482,10 +482,11 @@ export const WalletCard = forwardRef<HTMLDivElement, WalletCardProps>(({ wallet,
             }
           } catch (err) {
             console.error('[WalletCard] Etherscan fallback failed:', err);
+            // If even fallback fails, we'll catch it in the outer try/catch
             throw err;
           }
         }
-
+      }
 
       if (walletData) {
         setHoldings(walletData.holdings);
