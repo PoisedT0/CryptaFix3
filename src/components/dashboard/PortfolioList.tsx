@@ -1,38 +1,3 @@
-import { useState, useEffect } from "react";
-
-// Dentro il componente PortfolioList
-const [holdings, setHoldings] = useState<Record<string, Record<string, number>>>({});
-
-useEffect(() => {
-  const saved = localStorage.getItem("holdings");
-  if (saved) {
-    setHoldings(JSON.parse(saved));
-  }
-
-  // Opzionale: Aggiorna quando storage cambia
-  const handleStorage = () => {
-    const updated = localStorage.getItem("holdings");
-    if (updated) setHoldings(JSON.parse(updated));
-  };
-  window.addEventListener("storage", handleStorage);
-  return () => window.removeEventListener("storage", handleStorage);
-}, []);
-
-const aggregatedHoldings: Record<string, number> = {};
-
-Object.values(holdings).forEach((walletHoldings) => {
-  Object.entries(walletHoldings).forEach(([symbol, amount]) => {
-    aggregatedHoldings[symbol] = (aggregatedHoldings[symbol] || 0) + amount;
-  });
-});
-
-// Totale € (usa CoinGecko per prezzi reali – se hai getCurrentPrices)
-const totalValueEur = Object.entries(aggregatedHoldings).reduce((sum, [symbol, amount]) => {
-  const price = prices[symbol]?.eur || 0; // prices da CoinGecko
-  return sum + amount * price;
-}, 0);
-
-
 import { useState, useEffect, forwardRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
