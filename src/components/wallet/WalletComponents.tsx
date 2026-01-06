@@ -465,22 +465,27 @@ export const WalletCard = forwardRef<HTMLDivElement, WalletCardProps>(({ wallet,
           }
         }
 
-        // Fallback to Etherscan via edge function
+                // Fallback to Etherscan direct API
         if (!walletData) {
-          const etherscanData = await fetchEtherscan(wallet.address, network);
-          if (etherscanData) {
-            walletData = {
-              holdings: etherscanData.holdings,
-              transactions: etherscanData.transactions,
-              valueEur: 0,
-              address: etherscanData.address,
-              chain: etherscanData.chain,
-              provider: 'etherscan' as Provider,
-            };
-            usedProvider = 'etherscan';
+          try {
+            const etherscanData = await fetchEtherscan(wallet.address, network);
+            if (etherscanData) {
+              walletData = {
+                holdings: etherscanData.holdings,
+                transactions: etherscanData.transactions,
+                valueEur: 0,
+                address: etherscanData.address,
+                chain: etherscanData.chain,
+                provider: 'etherscan' as Provider,
+              };
+              usedProvider = 'etherscan';
+            }
+          } catch (err) {
+            console.error('[WalletCard] Etherscan fallback failed:', err);
+            throw err;
           }
         }
-      }
+
 
       if (walletData) {
         setHoldings(walletData.holdings);

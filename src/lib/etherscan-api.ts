@@ -6,6 +6,14 @@
 
 // This replaces the previous Supabase Edge Function dependency.
 
+// Etherscan API V2 Integration (client-side)
+// Supports ETH, Polygon, Arbitrum, Base, Optimism, BSC via their "scan" explorers.
+//
+
+// Migrated from deprecated V1 endpoints to V2 API
+
+// This replaces the previous Supabase Edge Function dependency.
+
 export interface EtherscanWalletTransaction {
   hash: string;
   type: 'buy' | 'sell' | 'transfer' | 'stake' | 'airdrop';
