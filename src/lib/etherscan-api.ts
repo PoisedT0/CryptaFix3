@@ -6,14 +6,6 @@
 
 // This replaces the previous Supabase Edge Function dependency.
 
-// Etherscan API V2 Integration (client-side)
-// Supports ETH, Polygon, Arbitrum, Base, Optimism, BSC via their "scan" explorers.
-//
-
-// Migrated from deprecated V1 endpoints to V2 API
-
-// This replaces the previous Supabase Edge Function dependency.
-
 export interface EtherscanWalletTransaction {
   hash: string;
   type: 'buy' | 'sell' | 'transfer' | 'stake' | 'airdrop';
@@ -151,10 +143,13 @@ export async function fetchEtherscanWalletData(
 
   try {
     const [balResp, txResp, tokenResp] = await Promise.all([
-      fetchJson<ApiResp<string>>(balanceUrl, signal).catch(() => ({ status: '0', message: 'err', result: '0' } as any)),
-      fetchJson<ApiResp<TxListItem[]>>(txUrl, signal).catch(() => ({ status: '0', message: 'err', result: [] } as any)),
-      fetchJson<ApiResp<TokenTxItem[]>>(tokenUrl, signal).catch(() => ({ status: '0', message: 'err', result: [] } as any)),
+      fetchJson<ApiResp<string>>(balanceUrl, signal).catch((e) => { console.error('[Etherscan Debug] Balance Error:', e); return { status: '0', message: 'err', result: '0' } as any; }),
+      fetchJson<ApiResp<TxListItem[]>>(txUrl, signal).catch((e) => { console.error('[Etherscan Debug] Tx Error:', e); return { status: '0', message: 'err', result: [] } as any; }),
+      fetchJson<ApiResp<TokenTxItem[]>>(tokenUrl, signal).catch((e) => { console.error('[Etherscan Debug] Token Error:', e); return { status: '0', message: 'err', result: [] } as any; }),
     ]);
+
+    console.log('[Etherscan Debug] Raw Balance:', balResp.result);
+    console.log('[Etherscan Debug] Token Tx Count:', tokenResp.result?.length);
 
     const txItems: TxListItem[] = Array.isArray(txResp.result) ? txResp.result : [];
     const tokenItems: TokenTxItem[] = Array.isArray(tokenResp.result) ? tokenResp.result : [];
@@ -214,24 +209,34 @@ export async function fetchEtherscanWalletData(
     // Holdings: start from native balance
     const holdings: Record<string, number> = {};
     const nativeBalance = parseWeiToEth((balResp as any)?.result || '0');
-    if (nativeBalance > 0) holdings[nativeSymbol] = nativeBalance;
+    
+    // Always include native symbol if balance > 0
+    if (nativeBalance > 0) {
+      holdings[nativeSymbol] = nativeBalance;
+    }
     
     const addrLower = address.toLowerCase();
     // Best-effort token holdings from transfer netting
     for (const tx of transactions) {
+      // Skip native transfers as we use the direct balance endpoint for native
+      if (tx.asset === nativeSymbol) continue;
+      
       const incoming = (tx.to || '').toLowerCase() === addrLower;
-      const sign = incoming ? 1 : -1;
-      if (tx.asset === nativeSymbol) continue; // native handled by balance endpoint
-      holdings[tx.asset] = (holdings[tx.asset] || 0) + sign * tx.amount;
+      const outgoing = (tx.from || '').toLowerCase() === addrLower;
+      
+      if (incoming) {
+        holdings[tx.asset] = (holdings[tx.asset] || 0) + tx.amount;
+      }
+      if (outgoing) {
+        holdings[tx.asset] = (holdings[tx.asset] || 0) - tx.amount;
+      }
     }
 
-    // Remove zeros / tiny negatives from rounding
+    // Cleanup holdings: remove zeros, tiny negatives, and handle rounding
     for (const [k, v] of Object.entries(holdings)) {
-      if (!Number.isFinite(v) || Math.abs(v) < 1e-12) {
+      if (!Number.isFinite(v) || v < 1e-10) {
         delete holdings[k];
-        continue;
       }
-      if (v < 0) holdings[k] = 0;
     }
 
     return { holdings, transactions };
