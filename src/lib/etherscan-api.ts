@@ -108,14 +108,15 @@ export async function fetchEtherscanWalletData(
 ): Promise<{ holdings: Record<string, number>; transactions: EtherscanWalletTransaction[] } | null> {
   ensureApiKey(apiKey, network);
 
-  const EXPLORER_API: Record<string, { apiBase: string; nativeSymbol: string }> = {
-    ethereum: { apiBase: 'https://api.etherscan.io/api', nativeSymbol: 'ETH' },
-    polygon: { apiBase: 'https://api.polygonscan.com/api', nativeSymbol: 'MATIC' },
-    arbitrum: { apiBase: 'https://api.arbiscan.io/api', nativeSymbol: 'ETH' },
-    base: { apiBase: 'https://api.basescan.org/api', nativeSymbol: 'ETH' },
-    optimism: { apiBase: 'https://api-optimistic.etherscan.io/api', nativeSymbol: 'ETH' },
-    bsc: { apiBase: 'https://api.bscscan.com/api', nativeSymbol: 'BNB' },
-    linea: { apiBase: 'https://api.lineascan.build/api', nativeSymbol: 'ETH' },
+  // Updated to Etherscan API V2 endpoints
+  const EXPLORER_API: Record<string, { apiBase: string; nativeSymbol: string; chainId?: string }> = {
+    ethereum: { apiBase: 'https://api.etherscan.io/v2/api', nativeSymbol: 'ETH', chainId: '1' },
+    polygon: { apiBase: 'https://api.polygonscan.com/v2/api', nativeSymbol: 'MATIC', chainId: '137' },
+    arbitrum: { apiBase: 'https://api.arbiscan.io/v2/api', nativeSymbol: 'ETH', chainId: '42161' },
+    base: { apiBase: 'https://api.basescan.org/v2/api', nativeSymbol: 'ETH', chainId: '8453' },
+    optimism: { apiBase: 'https://api-optimistic.etherscan.io/v2/api', nativeSymbol: 'ETH', chainId: '10' },
+    bsc: { apiBase: 'https://api.bscscan.com/v2/api', nativeSymbol: 'BNB', chainId: '56' },
+    linea: { apiBase: 'https://api.lineascan.build/v2/api', nativeSymbol: 'ETH', chainId: '59144' },
   };
 
   const cfg = EXPLORER_API[network];
@@ -124,20 +125,22 @@ export async function fetchEtherscanWalletData(
   
   if (!apiBase) throw new Error(`Explorer API not configured for network: ${network}`);
 
+  const chainParam = cfg.chainId ? `&chainid=${cfg.chainId}` : '';
+
   // V2 API: Fetch on-chain native balance
   const balanceUrl = `${apiBase}?module=account&action=balance&address=${encodeURIComponent(
     address
-  )}&tag=latest&apikey=${encodeURIComponent(apiKey)}`;
+  )}&tag=latest&apikey=${encodeURIComponent(apiKey)}${chainParam}`;
 
   // V2 API: Fetch normal tx list (native transfers)
   const txUrl = `${apiBase}?module=account&action=txlist&address=${encodeURIComponent(
     address
-  )}&startblock=0&endblock=99999999&sort=asc&apikey=${encodeURIComponent(apiKey)}`;
+  )}&startblock=0&endblock=99999999&sort=asc&apikey=${encodeURIComponent(apiKey)}${chainParam}`;
 
   // V2 API: Fetch ERC20 token transfers
   const tokenUrl = `${apiBase}?module=account&action=tokentx&address=${encodeURIComponent(
     address
-  )}&startblock=0&endblock=99999999&sort=asc&apikey=${encodeURIComponent(apiKey)}`;
+  )}&startblock=0&endblock=99999999&sort=asc&apikey=${encodeURIComponent(apiKey)}${chainParam}`;
 
   type ApiResp<T> = { status: string; message: string; result: T };
 
