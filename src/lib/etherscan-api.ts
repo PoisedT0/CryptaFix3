@@ -3,7 +3,6 @@
 //
 
 // Migrated from deprecated V1 endpoints to V2 API
-import { etherscanLimiter } from './api-rate-limiter';
 
 // This replaces the previous Supabase Edge Function dependency.
 
@@ -55,18 +54,29 @@ function ensureApiKey(apiKey: string, network: string): void {
 
 function parseWeiToEth(wei: string): number {
   try {
-    const v = BigInt(wei);
-    return Number(v) / 1e18;
+    const v = BigInt(wei || '0');
+    const eth = Number(v) / 1e18;
+    return Number.isFinite(eth) ? eth : 0;
   } catch (e) {
+    console.warn('[Etherscan] Failed to parse wei:', wei, e);
     return 0;
   }
 }
 
-function parseTokenAmount(value: string, decimals: string | number): number {
+function parseTokenAmount(value: string, decimals: string): number {
   try {
-    const v = BigInt(value);
-    const d = typeof decimals === 'string' ? parseInt(decimals) : decimals;
-    if (isNaN(d)) return 0;
+    const d = Number(decimals || 0);
+    const v = BigInt(value || '0');
+    const pow10 = (n: number): bigint => {
+      let r = 1n;
+      for (let i = 0; i < n; i++) r *= 10n;
+      return r;
+    };
+
+    if (d > 18) {
+      const scaled = Number(v / pow10(d - 18)) / 1e18;
+      return Number.isFinite(scaled) ? scaled : 0;
+    }
 
     const denom = 10 ** d;
     const scaled = Number(v) / denom;
@@ -78,23 +88,16 @@ function parseTokenAmount(value: string, decimals: string | number): number {
 }
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  return etherscanLimiter.enqueue(url, async () => {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    
-    // Handle Etherscan specific rate limit messages in the JSON response
-    if (data.status === '0' && (data.result || '').includes('rate limit')) {
-      throw new Error('Max calls per sec rate limit reached');
-    }
-    
-    if (data.status === '0' && data.message === 'NOTOK') {
-      throw new Error(data.result || 'Etherscan API error');
-    }
-    return data;
-  });
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  
+  // Check for API errors in V2 response
+  if (data.status === '0' || data.message === 'NOTOK') {
+    throw new Error(data.result || 'API Error');
+  }
+  
+  return data as T;
 }
 
 export async function fetchEtherscanWalletData(
@@ -160,37 +163,44 @@ export async function fetchEtherscanWalletData(
     for (const t of txItems) {
       if (t.isError === '1') continue;
       const amount = parseWeiToEth(t.value);
-      if (amount === 0) continue;
-
-      const isOut = t.from.toLowerCase() === address.toLowerCase();
+      if (!amount || amount === 0) continue;
+      const ts = Number(t.timeStamp) * 1000;
       
+      let fee = 0;
+      try {
+        if (t.gasUsed && t.gasPrice) {
+          const feeWei = BigInt(t.gasUsed) * BigInt(t.gasPrice);
+          fee = Number(feeWei) / 1e18;
+        }
+      } catch (e) {
+        console.warn('[Etherscan] Failed to calculate fee:', e);
+      }
+
       transactions.push({
         hash: t.hash,
-        type: isOut ? 'sell' : 'buy',
+        type: 'transfer',
         asset: nativeSymbol,
         amount,
-        timestamp: parseInt(t.timeStamp) * 1000,
+        timestamp: ts,
         valueEur: 0,
-        fee: parseWeiToEth((BigInt(t.gas || '0') * BigInt(t.gasPrice || '0')).toString()),
+        fee: Number.isFinite(fee) ? fee : 0,
         feeEur: 0,
         from: t.from,
         to: t.to,
       });
     }
 
-    // Token transfers
+    // ERC20 transfers
     for (const t of tokenItems) {
       const amount = parseTokenAmount(t.value, t.tokenDecimal);
-      if (amount === 0) continue;
-
-      const isOut = t.from.toLowerCase() === address.toLowerCase();
-
+      if (!amount || amount === 0) continue;
+      const ts = Number(t.timeStamp) * 1000;
       transactions.push({
         hash: t.hash,
-        type: isOut ? 'sell' : 'buy',
-        asset: (t.tokenSymbol || 'UNKNOWN').toUpperCase(),
+        type: 'transfer',
+        asset: (t.tokenSymbol || '').toUpperCase(),
         amount,
-        timestamp: parseInt(t.timeStamp) * 1000,
+        timestamp: ts,
         valueEur: 0,
         fee: 0,
         feeEur: 0,
